@@ -24,7 +24,7 @@
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            background-image: url('bg_capital.jpg'); /* 背景画像 */
+            background-image: url('bg_capital.PNG'); /* 背景画像 */
             background-size: cover;
             background-position: center;
         }
@@ -179,7 +179,7 @@
         // ■ オープニング
         'intro': {
             text: "西暦20XX年。大阪国際空港を擁する豊中市は、その圧倒的な空輸力と「マチカネワニ」の遺伝子工学応用により、京都・神戸・大阪市を制圧。<br>北摂を首都とする「大豊中皇国」が誕生した。<br><br>しかし今、ものづくりの街「東成区」にて、皇国に対する大規模な反乱が発生したとの報が入る。",
-            image: "bg_capital.jpg",
+            image: "bg_capital.PNG",
             choices: [
                 {
                     text: "反乱鎮圧の指揮を執る",
@@ -192,7 +192,7 @@
         // ■ 第1章：初期対応
         'scene_1': {
             text: "東成区の工場地帯が要塞化されています。彼らは中小企業の技術力を結集し、即席のパワードスーツで抵抗している模様。<br>元首、初動はどうなさいますか？",
-            image: "bg_war_room.jpg",
+            image: "bg_war_room.JPG",
             choices: [
                 {
                     text: "【武力】特殊部隊「マチカネ・クロコダイル」を新御堂筋から突入させる",
@@ -215,7 +215,7 @@
         // ■ 第2章ルートA：武力突入
         'scene_2_fight': {
             text: "マチカネ部隊が今里交差点で激突！<br>東成区の抵抗は激しいですが、我が軍の火力で押し込んでいます。<br>しかし、民間人にも被害が出そうだとの報告が…。",
-            image: "event_attack.jpg",
+            image: "event_attack.PNG",
             choices: [
                 {
                     text: "構わん、徹底的に焼き払え（武力制圧）",
@@ -251,7 +251,7 @@
         // ■ 第2章ルートC：静観
         'scene_2_wait': {
             text: "静観している間に、東成区の反乱軍が勢いづき、隣接する生野区や城東区にも飛び火しそうです。<br>市民の間で「豊中は弱腰ではないか？」という噂が広まっています。",
-            image: "event_revolt.jpg",
+            image: "event_revolt.JPG",
             choices: [
                 {
                     text: "全軍出撃！北摂の全戦力をもって叩き潰す！",
@@ -269,7 +269,7 @@
         // ■ クライマックス：全面戦争
         'scene_3_climax_war': {
             text: "最終決戦です。東成区役所周辺での市街戦。<br>勝敗は残された戦力と資金にかかっています…！",
-            image: "event_attack.jpg",
+            image: "event_attack.PNG",
             choices: [
                 {
                     text: "決着をつける！",
@@ -282,7 +282,7 @@
         // ■ クライマックス：包囲戦/交渉
         'scene_3_siege': {
             text: "長引く包囲戦により、東成区側も疲弊しています。<br>しかし、皇国の資金も底をつきそうです。",
-            image: "bg_war_room.jpg",
+            image: "bg_war_room.JPG",
             choices: [
                 {
                     text: "降伏勧告を行う",
@@ -331,22 +331,22 @@
         // ■ エンディング集
         'end_good_force': {
             text: "【武力鎮圧・勝利】<br>圧倒的な火力の前に東成区は降伏しました。<br>焼け野原となった地には、新たな「豊中第2空港」が建設されることになりました。<br>皇国の支配は盤石です。",
-            image: "end_success.jpg",
+            image: "end_success.jpeg",
             choices: [{ text: "最初に戻る", next: 'intro', effect: (s) => resetGame(s) }]
         },
         'end_good_peace': {
             text: "【併合完了・勝利】<br>東成区の技術力は大豊中皇国に吸収されました。<br>マチカネワニ・ロボットの量産が始まり、皇国はさらなる繁栄を迎えるでしょう。<br>賢明な判断でした、元首。",
-            image: "end_success.jpg",
+            image: "end_success.jpeg",
             choices: [{ text: "最初に戻る", next: 'intro', effect: (s) => resetGame(s) }]
         },
         'end_bad_revolt': {
             text: "【敗北・革命】<br>無理な鎮圧が市民の反感を買い、北摂全域で一斉蜂起が発生！<br>豊中市役所は群衆に包囲されました。<br>大豊中皇国はここに崩壊しました…。",
-            image: "end_fail.jpg",
+            image: "end_fail.jpeg",
             choices: [{ text: "最初に戻る", next: 'intro', effect: (s) => resetGame(s) }]
         },
         'end_bad_bankrupt': {
             text: "【敗北・財政破綻】<br>長引く紛争で資金が枯渇。給料の支払われない兵士たちがストライキを起こしました。<br>制御不能となった皇国は、近隣の東大阪市にあっけなく買収されました…。",
-            image: "end_fail.jpg",
+            image: "end_fail.jpeg",
             choices: [{ text: "最初に戻る", next: 'intro', effect: (s) => resetGame(s) }]
         }
     };
