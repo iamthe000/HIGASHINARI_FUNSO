@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大豊中皇国：東成の乱</title>
+    <style>
+        :root {
+            --primary-color: #002f58ff; /* 豊中ブルー */
+            --accent-color: #f6ff00ff; /* 皇国の威光（金） */
+            --danger-color: #ff4444;
+            --text-color: #e0e0e0;
+            --bg-color: #1a1a1a;
+            --panel-bg: rgba(0, 20, 40, 0.9);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-image: url('bg_capital.jpg'); /* 背景画像 */
+            background-size: cover;
+            background-position: center;
+        }
+
+        /* ゲームコンテナ */
+        #game-container {
+            width: 900px;
+            max-width: 95%;
+            background: var(--panel-bg);
+            border: 2px solid var(--primary-color);
+            box-shadow: 0 0 20px rgba(0, 91, 172, 0.5);
+            border-radius: 10px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ヘッダー（パラメータ表示） */
+        #status-bar {
+            display: flex;
+            justify-content: space-around;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.8);
+            border-bottom: 1px solid var(--primary-color);
+            font-weight: bold;
+        }
+
+        .stat-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .stat-value {
+            color: var(--accent-color);
+            font-size: 1.2em;
+        }
+
+        /* メイン画面（画像表示エリア） */
+        #scene-image {
+            width: 100%;
+            height: 350px;
+            background-color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #scene-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #scene-image .placeholder {
+            color: #888;
+            font-size: 1.5em;
+            text-align: center;
+            padding: 20px;
+        }
+
+        /* テキストエリア */
+        #text-area {
+            padding: 20px;
+            min-height: 120px;
+            font-size: 1.1em;
+            line-height: 1.6;
+            border-bottom: 1px solid #444;
+        }
+
+        /* 選択肢エリア */
+        #choices-area {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .choice-btn {
+            background: linear-gradient(to right, #003366, #005BAC);
+            color: white;
+            border: 1px solid var(--primary-color);
+            padding: 15px;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 1em;
+            border-radius: 5px;
+        }
+
+        .choice-btn:hover {
+            background: linear-gradient(to right, #005BAC, #007ACC);
+            transform: translateX(5px);
+            box-shadow: 0 0 10px var(--primary-color);
+        }
+
+        .choice-btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* ログ・演出用クラス */
+        .highlight { color: var(--accent-color); }
+        .danger { color: var(--danger-color); }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="status-bar">
+        <div class="stat-box">資金: <span id="money-val" class="stat-value">100</span></div>
+        <div class="stat-box">武力: <span id="army-val" class="stat-value">50</span></div>
+        <div class="stat-box">支持率: <span id="support-val" class="stat-value">50</span></div>
+    </div>
+
+    <div id="scene-image">
+        <div class="placeholder">画像エリア</div>
+    </div>
+
+    <div id="text-area">
+        <p id="story-text">読み込み中...</p>
+    </div>
+
+    <div id="choices-area">
+        </div>
+</div>
+
+<script>
+    /* * ゲームの状態管理
+     */
+    const gameState = {
+        money: 100,   // 資金
+        army: 50,     // 武力（マチカネワニ部隊など）
+        support: 50,  // 支持率（北摂エリアの結束）
+        currentScene: 'intro'
+    };
+
+    /*
+     * シナリオデータ (ルート分岐設定)
+     * id: シーンID
+     * text: 表示テキスト
+     * image: 表示する画像ファイル名
+     * choices: 選択肢の配列
+     * text: ボタンの文字
+     * next: 次のシーンID
+     * effect: パラメータ変動処理
+     */
+    const scenes = {
+        // ■ オープニング
+        'intro': {
+            text: "西暦20XX年。大阪国際空港を擁する豊中市は、その圧倒的な空輸力と「マチカネワニ」の遺伝子工学応用により、京都・神戸・大阪市を制圧。<br>北摂を首都とする「大豊中皇国」が誕生した。<br><br>しかし今、ものづくりの街「東成区」にて、皇国に対する大規模な反乱が発生したとの報が入る。",
+            image: "bg_capital.jpg",
+            choices: [
+                {
+                    text: "反乱鎮圧の指揮を執る",
+                    next: 'scene_1',
+                    effect: () => {}
+                }
+            ]
+        },
+
+        // ■ 第1章：初期対応
+        'scene_1': {
+            text: "東成区の工場地帯が要塞化されています。彼らは中小企業の技術力を結集し、即席のパワードスーツで抵抗している模様。<br>元首、初動はどうなさいますか？",
+            image: "bg_war_room.jpg",
+            choices: [
+                {
+                    text: "【武力】特殊部隊「マチカネ・クロコダイル」を新御堂筋から突入させる",
+                    next: 'scene_2_fight',
+                    effect: (s) => { s.money -= 20; s.army -= 10; s.support -= 5; }
+                },
+                {
+                    text: "【資金】京都の技術者を送り込み、技術供与を餌に買収する",
+                    next: 'scene_2_money',
+                    effect: (s) => { s.money -= 40; s.support += 5; }
+                },
+                {
+                    text: "【静観】まずは様子を見る（堺市の軍勢を待機させる）",
+                    next: 'scene_2_wait',
+                    effect: (s) => { s.army += 10; s.support -= 10; }
+                }
+            ]
+        },
+
+        // ■ 第2章ルートA：武力突入
+        'scene_2_fight': {
+            text: "マチカネ部隊が今里交差点で激突！<br>東成区の抵抗は激しいですが、我が軍の火力で押し込んでいます。<br>しかし、民間人にも被害が出そうだとの報告が…。",
+            image: "event_attack.jpg",
+            choices: [
+                {
+                    text: "構わん、徹底的に焼き払え（武力制圧）",
+                    next: 'scene_3_climax_war',
+                    effect: (s) => { s.army -= 10; s.support -= 20; }
+                },
+                {
+                    text: "一時撤退し、兵糧攻めに切り替える",
+                    next: 'scene_3_siege',
+                    effect: (s) => { s.money -= 10; s.army += 5; }
+                }
+            ]
+        },
+
+        // ■ 第2章ルートB：買収工作
+        'scene_2_money': {
+            text: "京都から派遣した使者が、東成区の工場長たちと接触。<br>「豊中傘下に入れば、空港を使って製品を世界に売れる」と説得中。<br>しかし、リーダー格がさらなる資金を要求しています。",
+            image: "event_diplomacy.jpg",
+            choices: [
+                {
+                    text: "要求を飲む（追加資金投入）",
+                    next: 'scene_3_bribe_success',
+                    effect: (s) => { s.money -= 50; s.support += 10; }
+                },
+                {
+                    text: "交渉決裂。直ちに空爆せよ",
+                    next: 'scene_3_climax_war',
+                    effect: (s) => { s.support -= 10; s.army -= 5; }
+                }
+            ]
+        },
+
+        // ■ 第2章ルートC：静観
+        'scene_2_wait': {
+            text: "静観している間に、東成区の反乱軍が勢いづき、隣接する生野区や城東区にも飛び火しそうです。<br>市民の間で「豊中は弱腰ではないか？」という噂が広まっています。",
+            image: "event_revolt.jpg",
+            choices: [
+                {
+                    text: "全軍出撃！北摂の全戦力をもって叩き潰す！",
+                    next: 'scene_3_climax_war',
+                    effect: (s) => { s.army -= 30; s.support += 5; }
+                },
+                {
+                    text: "神戸港からの物流を止め、経済封鎖を行う",
+                    next: 'scene_3_siege',
+                    effect: (s) => { s.money -= 10; s.support -= 5; }
+                }
+            ]
+        },
+
+        // ■ クライマックス：全面戦争
+        'scene_3_climax_war': {
+            text: "最終決戦です。東成区役所周辺での市街戦。<br>勝敗は残された戦力と資金にかかっています…！",
+            image: "event_attack.jpg",
+            choices: [
+                {
+                    text: "決着をつける！",
+                    next: 'check_ending_war',
+                    effect: () => {} // ここで判定へ
+                }
+            ]
+        },
+
+        // ■ クライマックス：包囲戦/交渉
+        'scene_3_siege': {
+            text: "長引く包囲戦により、東成区側も疲弊しています。<br>しかし、皇国の資金も底をつきそうです。",
+            image: "bg_war_room.jpg",
+            choices: [
+                {
+                    text: "降伏勧告を行う",
+                    next: 'check_ending_siege',
+                    effect: () => {} // ここで判定へ
+                }
+            ]
+        },
+        
+        'scene_3_bribe_success': {
+            text: "資金援助により、東成区の一部が裏切りました。<br>内部崩壊が始まっています。",
+            image: "event_diplomacy.jpg",
+            choices: [
+                {
+                    text: "無血開城を受け入れる",
+                    next: 'end_good_peace',
+                    effect: () => {}
+                }
+            ]
+        },
+
+        // ■ エンディング分岐判定（ロジックのみ、画面表示なし）
+        // ここはユーザーに見せず、パラメータによって次のシーンを決定する
+        'check_ending_war': {
+            isLogic: true,
+            handler: (s) => {
+                if (s.army > 20 && s.support > 20) {
+                    return 'end_good_force';
+                } else {
+                    return 'end_bad_revolt';
+                }
+            }
+        },
+
+        'check_ending_siege': {
+            isLogic: true,
+            handler: (s) => {
+                if (s.money > 20 && s.support > 30) {
+                    return 'end_good_peace';
+                } else {
+                    return 'end_bad_bankrupt';
+                }
+            }
+        },
+
+        // ■ エンディング集
+        'end_good_force': {
+            text: "【武力鎮圧・勝利】<br>圧倒的な火力の前に東成区は降伏しました。<br>焼け野原となった地には、新たな「豊中第2空港」が建設されることになりました。<br>皇国の支配は盤石です。",
+            image: "end_success.jpg",
+            choices: [{ text: "最初に戻る", next: 'intro', effect: (s) => resetGame(s) }]
+        },
+        'end_good_peace': {
+            text: "【併合完了・勝利】<br>東成区の技術力は大豊中皇国に吸収されました。<br>マチカネワニ・ロボットの量産が始まり、皇国はさらなる繁栄を迎えるでしょう。<br>賢明な判断でした、元首。",
+            image: "end_success.jpg",
+            choices: [{ text: "最初に戻る", next: 'intro', effect: (s) => resetGame(s) }]
+        },
+        'end_bad_revolt': {
+            text: "【敗北・革命】<br>無理な鎮圧が市民の反感を買い、北摂全域で一斉蜂起が発生！<br>豊中市役所は群衆に包囲されました。<br>大豊中皇国はここに崩壊しました…。",
+            image: "end_fail.jpg",
+            choices: [{ text: "最初に戻る", next: 'intro', effect: (s) => resetGame(s) }]
+        },
+        'end_bad_bankrupt': {
+            text: "【敗北・財政破綻】<br>長引く紛争で資金が枯渇。給料の支払われない兵士たちがストライキを起こしました。<br>制御不能となった皇国は、近隣の東大阪市にあっけなく買収されました…。",
+            image: "end_fail.jpg",
+            choices: [{ text: "最初に戻る", next: 'intro', effect: (s) => resetGame(s) }]
+        }
+    };
+
+    /*
+     * システム関数
+     */
+
+    // ゲーム初期化
+    function resetGame(s) {
+        s.money = 100;
+        s.army = 50;
+        s.support = 50;
+    }
+
+    // 画面更新
+    function updateScreen() {
+        // パラメータ更新
+        document.getElementById('money-val').textContent = gameState.money;
+        document.getElementById('army-val').textContent = gameState.army;
+        document.getElementById('support-val').textContent = gameState.support;
+        
+        // 色変え（ピンチの時）
+        document.getElementById('money-val').className = gameState.money < 30 ? 'stat-value danger' : 'stat-value';
+        document.getElementById('army-val').className = gameState.army < 20 ? 'stat-value danger' : 'stat-value';
+        document.getElementById('support-val').className = gameState.support < 30 ? 'stat-value danger' : 'stat-value';
+
+        const sceneData = scenes[gameState.currentScene];
+
+        // ロジック判定のみのシーンの場合、即座に次のシーンへ遷移
+        if (sceneData.isLogic) {
+            const nextSceneId = sceneData.handler(gameState);
+            gameState.currentScene = nextSceneId;
+            updateScreen(); // 再帰呼び出し
+            return;
+        }
+
+        // 画像更新（画像がない場合はプレースホルダーを表示）
+        const imgContainer = document.getElementById('scene-image');
+        imgContainer.innerHTML = '';
+        if (sceneData.image) {
+            const img = document.createElement('img');
+            img.src = sceneData.image;
+            img.alt = "Scene Image";
+            // 画像読み込みエラー時の処理（プレースホルダー表示）
+            img.onerror = function() {
+                this.style.display = 'none';
+                const div = document.createElement('div');
+                div.className = 'placeholder';
+                div.textContent = `画像: ${sceneData.image} (未設定)`;
+                div.style.color = '#ccc';
+                imgContainer.appendChild(div);
+            };
+            imgContainer.appendChild(img);
+        }
+
+        // テキスト更新
+        document.getElementById('story-text').innerHTML = sceneData.text;
+
+        // 選択肢ボタン生成
+        const choicesContainer = document.getElementById('choices-area');
+        choicesContainer.innerHTML = '';
+
+        sceneData.choices.forEach(choice => {
+            const btn = document.createElement('button');
+            btn.className = 'choice-btn';
+            btn.textContent = choice.text;
+            btn.onclick = () => {
+                // 効果適用
+                if (choice.effect) choice.effect(gameState);
+                // シーン遷移
+                gameState.currentScene = choice.next;
+                updateScreen();
+            };
+            choicesContainer.appendChild(btn);
+        });
+    }
+
+    // ゲーム開始
+    updateScreen();
+
+</script>
+
+</body>
+</html>
