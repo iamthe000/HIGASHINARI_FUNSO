@@ -297,9 +297,9 @@
             image: "bg_war_room.JPG",
             choices: [
                 {
-                    text: "徴税強化で賄う (支持率-25, 資金+30)",
+                    text: "徴税強化で賄う (支持率-25, 資金+35)",
                     next: 'scene_climax_check',
-                    effect: (s) => { s.support -= 25; s.money += 30; }
+                    effect: (s) => { s.support -= 25; s.money += 35; }
                 },
                 {
                     text: "あるだけの戦力で残党を狩る (武力-20)",
@@ -318,8 +318,8 @@
                     s.rebelPower = 0; // 敵組織崩壊
                     return 'end_good_assassin';
                 } else {
-                    s.support -= 20;
-                    s.rebelPower += 20; // 失敗して敵が激怒
+                    s.support -= 25;
+                    s.rebelPower += 25; // 失敗して敵が激怒
                     return 'scene_assassin_fail';
                 }
             }
@@ -344,9 +344,9 @@
             image: "event_drone.jpg", // 【新規】ドローン視点の画像推奨
             choices: [
                 {
-                    text: "精密爆撃で地下のみを破壊する (資金-20, 成功率高)",
+                    text: "精密爆撃で地下のみを破壊する (資金-30, 成功率高)",
                     next: 'scene_mid_drone',
-                    effect: (s) => { s.money -= 20; s.rebelPower -= 30; }
+                    effect: (s) => { s.money -= 30; s.rebelPower -= 30; }
                 },
                 {
                     text: "情報を元に、特殊部隊を潜入させる (武力-10, リスク中)",
