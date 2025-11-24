@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>大豊中皇国：東成紛争/東成独立戦争</title>
+    <title>大豊中皇国：東成鎮圧戦（エンドレス・ウォー）</title>
     <style>
         :root {
             --primary-color: #002f58ff; /* 豊中ブルー */
+            --hankyu-color: #800000; /* 阪急マルーン */
             --accent-color: #d4af37; /* 皇国の威光（金） */
             --danger-color: #ff3333;
             --text-color: #e0e0e0;
@@ -43,10 +44,16 @@
             position: relative;
         }
 
+        /* 阪急発動時の特殊演出 */
+        #game-container.hankyu-mode {
+            border: 4px solid var(--hankyu-color);
+            box-shadow: 0 0 50px var(--hankyu-color);
+        }
+
         /* パラメータ表示 */
         #status-bar {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr 1fr; /* 4列に変更 */
             padding: 15px;
             background: linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0.7));
             border-bottom: 3px solid var(--primary-color);
@@ -59,11 +66,17 @@
             flex-direction: column;
             align-items: center;
             gap: 5px;
+            border-right: 1px solid #444;
         }
+        .stat-box:last-child { border-right: none; }
 
         .stat-label { font-size: 0.8em; color: #888; }
         .stat-value { color: var(--accent-color); font-size: 1.4em; font-family: monospace; }
-        .danger { color: var(--danger-color); animation: pulse 1s infinite; }
+        
+        /* 敵勢力表示 */
+        #rebel-val { color: var(--danger-color); }
+
+        .danger { color: var(--danger-color); animation: pulse 0.5s infinite; }
 
         @keyframes pulse {
             0% { opacity: 1; }
@@ -88,19 +101,7 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
-            transition: opacity 0.5s ease;
-        }
-
-        .rebel-indicator {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(255, 0, 0, 0.6);
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 0.8em;
-            color: white;
-            border: 1px solid #ff9999;
+            transition: opacity 0.5s;
         }
         
         /* テキストエリア */
@@ -142,25 +143,10 @@
             box-shadow: 0 0 15px rgba(77, 166, 255, 0.3);
         }
 
-        .choice-btn:disabled {
-            background: #333;
-            color: #666;
-            border-color: #444;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-
-        .choice-btn::before {
-            content: "▶";
-            margin-right: 10px;
-            color: var(--accent-color);
-        }
-
-        .choice-cost {
-            float: right;
-            font-size: 0.85em;
-            color: #ffaaaa;
+        /* 阪急ボタン */
+        .hankyu-btn {
+            background: linear-gradient(90deg, #5c0000, #800000) !important;
+            border-color: #d4af37 !important;
         }
 
         .placeholder {
@@ -169,9 +155,10 @@
             border: 2px dashed #444;
             padding: 20px;
             text-align: center;
+            background: rgba(0,0,0,0.8);
         }
 
-        /* ゲームオーバーなどのオーバーレイ演出 */
+        /* アラートオーバーレイ */
         #overlay {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -181,30 +168,47 @@
             transition: opacity 0.5s;
             z-index: 10;
         }
+        
+        #turn-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 5px 10px;
+            border: 1px solid #666;
+            font-size: 0.8em;
+            color: #aaa;
+            z-index: 5;
+        }
     </style>
 </head>
 <body>
 
 <div id="game-container">
     <div id="overlay"></div>
+    <div id="turn-indicator">Turn: <span id="turn-val">1</span></div>
+    
     <div id="status-bar">
         <div class="stat-box">
             <span class="stat-label">国家予算</span>
             <span id="money-val" class="stat-value">60</span>
         </div>
         <div class="stat-box">
-            <span class="stat-label">軍事力</span>
-            <span id="army-val" class="stat-value">50</span>
+            <span class="stat-label">皇国軍事力</span>
+            <span id="army-val" class="stat-value">60</span>
         </div>
         <div class="stat-box">
             <span class="stat-label">北摂支持率</span>
             <span id="support-val" class="stat-value">50</span>
         </div>
+        <div class="stat-box">
+            <span class="stat-label">東成反乱度</span>
+            <span id="rebel-val" class="stat-value">30</span>
+        </div>
     </div>
 
     <div id="scene-image">
         <div class="placeholder">Loading...</div>
-        <div class="rebel-indicator">敵勢力: <span id="rebel-val">Unknown</span></div>
     </div>
 
     <div id="text-area">
@@ -216,449 +220,237 @@
 </div>
 
 <script>
-    /* * ゲームの状態管理
-     * Hardcore調整：初期値を下げ、敵勢力を強めに設定
+    /* * ■ ゲーム設計思想：ループ型・リソース管理
+     * 固定シナリオではなく、ランダムイベントの繰り返しにより「泥沼の紛争」を表現する。
+     * ターンごとに反乱度は自然上昇する。
      */
+
     const initialGameState = {
-        money: 70,      // 初期予算（やや少なめ）
-        army: 50,       // 初期軍事（心もとない）
-        support: 60,    // 初期支持（プライド高い北摂市民）
-        rebelPower: 40, // 敵の強さ。これが80を超えると手がつけられなくなる
-        turn: 0,
-        currentScene: 'intro'
+        money: 60,      // やや低めでスタート
+        army: 60,
+        support: 50,
+        rebelPower: 30, // 0で勝利、100で敗北
+        turn: 1,
+        isHankyuMode: false // 阪急確変モードフラグ
     };
 
     let gameState = { ...initialGameState };
 
-    /*
-     * シナリオデータ
+    // ■ 新規画像推奨リスト
+    // image: "event_danjiri.jpg" -> 改造だんじり戦車
+    // image: "event_factory.jpg" -> 地下工場
+    // image: "event_hankyu.jpg" -> 阪急電車（光り輝く）
+    // image: "event_obachan.jpg" -> 大阪のおばちゃん部隊
+    // image: "event_robot.jpg" -> 東成製巨大ロボ
+    // image: "bg_ruins.jpg" -> 荒廃した街並み
+
+    /* * ランダムイベントプール 
+     * ここにイベントを追加することで無限にバリエーションが増える
      */
-    const scenes = {
-        // ■ オープニング
-        'intro': {
-            text: "西暦20XX年。大豊中皇国は「東成独立戦争」の泥沼にいた。<br>ものづくりの街・東成区は、その高い技術力を軍事転用し、頑強な抵抗を続けている。<br>長引く紛争に北摂市民の不満は限界に近い。<br><br>元首よ、冷徹な判断を下せ。<br><strong style='color:red;'>※警告：予算・軍事・支持率のいずれかが0になると国家は崩壊する。</strong>",
-            image: "bg_capital.PNG",
+    const randomEvents = [
+        {
+            id: 'danjiri_attack',
+            text: "「ソーリャ！ソーリャ！」<br>今里ロータリー付近で、東成軍の**装甲だんじり部隊**が突撃してきました。<br>凄まじい速度と質量です。",
+            image: "event_danjiri.jpg",
             choices: [
-                {
-                    text: "状況を開始する",
-                    next: 'scene_1',
-                    effect: () => {}
-                }
+                { text: "正面から砲撃で粉砕する (武力-15, 反乱度-15)", effect: (s) => { s.army -= 15; s.rebelPower -= 15; } },
+                { text: "バリケードで回避し、燃料切れを待つ (予算-10, 反乱度-5)", effect: (s) => { s.money -= 10; s.rebelPower -= 5; } },
+                { text: "逃げる (支持率-15, 反乱度+10)", effect: (s) => { s.support -= 15; s.rebelPower += 10; } }
             ]
         },
-
-        // ■ 第1章：開戦の狼煙
-        'scene_1': {
-            text: "東成区境の今里ロータリーにて、皇国軍の先遣隊がバリケードに接触。<br>敵は工場用クレーンを改造した重機で道を塞いでいる。<br>初期対応はどうするか？",
+        {
+            id: 'sewing_machine_gun',
+            text: "東成の町工場が、工業用ミシンを改造した**高速連射ガトリング**を配備しました。<br>皇国軍のドローンが次々と撃ち落とされています。",
+            image: "event_factory.jpg",
+            choices: [
+                { text: "対抗して最新兵器を投入 (予算-25, 反乱度-20)", effect: (s) => { s.money -= 25; s.rebelPower -= 20; } },
+                { text: "歩兵による人海戦術で制圧 (武力-20, 支持率-5, 反乱度-15)", effect: (s) => { s.army -= 20; s.support -= 5; s.rebelPower -= 15; } },
+                { text: "部品の供給ルートを断つ (予算-5, 武力-5)", effect: (s) => { s.money -= 5; s.army -= 5; /* 効果薄い */ } }
+            ]
+        },
+        {
+            id: 'obachan_spy',
+            text: "「あんた、これ飴ちゃんあげるわ」<br>東成の**おばちゃん部隊**が検問を突破し、兵士に飴を配りながら情報を収集しています。<br>士気が骨抜きにされています！",
+            image: "event_obachan.jpg",
+            choices: [
+                { text: "おばちゃんを強制排除する (支持率-30, 反乱度+10)", effect: (s) => { s.support -= 30; s.rebelPower += 10; } },
+                { text: "高級和菓子で買収し、二重スパイにする (予算-30, 支持率+5)", effect: (s) => { s.money -= 30; s.support += 5; s.rebelPower -= 5; } },
+                { text: "見て見ぬふりをする (武力-10)", effect: (s) => { s.army -= 10; s.rebelPower += 5; } }
+            ]
+        },
+        {
+            id: 'monozukuri_spirit',
+            text: "東成区民の「ものづくり魂」が覚醒。<br>廃材を組み合わせた**巨大ロボット**が深江橋に出現！<br>豊中市民が恐怖で震えています。",
+            image: "event_robot.jpg",
+            choices: [
+                { text: "マチカネ・ミサイル全弾発射 (武力-30, 反乱度-30)", effect: (s) => { s.army -= 30; s.rebelPower -= 30; } },
+                { text: "プロパガンダ放送で「あれは特撮だ」と誤魔化す (支持率-10, 予算-5)", effect: (s) => { s.support -= 10; s.money -= 5; s.rebelPower += 10; } },
+                { text: "鹵獲（ろかく）して解析を試みる (武力-20, 失敗リスク有)", effect: (s) => { 
+                    if(Math.random() > 0.5) { s.army -= 10; s.money += 20; alert("鹵獲成功！技術を売却しました。"); } 
+                    else { s.army -= 30; alert("解析失敗、部隊壊滅！"); } 
+                }}
+            ]
+        },
+        {
+            id: 'media_war',
+            text: "SNS上で「豊中の圧政」を訴える動画がバズっています。<br>国際社会（主に大阪市と堺市）からの風当たりが強くなっています。",
             image: "bg_war_room.JPG",
             choices: [
-                {
-                    text: "マチカネ機甲師団で強行突破",
-                    costText: "武力-15, 資金-10",
-                    next: 'branch_fight_1',
-                    condition: (s) => s.army >= 15 && s.money >= 10,
-                    effect: (s) => { s.army -= 15; s.money -= 10; s.rebelPower -= 5; }
-                },
-                {
-                    text: "裏ルートで敵幹部と接触を図る",
-                    costText: "資金-20, 支持-5",
-                    next: 'branch_bribe_1',
-                    condition: (s) => s.money >= 20,
-                    effect: (s) => { s.money -= 20; s.support -= 5; s.rebelPower -= 10; }
-                },
-                {
-                    text: "阪大AI研究所によるサイバー攻撃",
-                    costText: "資金-15, 武力-5",
-                    next: 'branch_intel_1',
-                    condition: (s) => s.money >= 15,
-                    effect: (s) => { s.money -= 15; s.army -= 5; s.rebelPower += 5; /* 敵解析中に時間が過ぎる */ }
-                }
+                { text: "情報統制を行い、アカウントを凍結 (予算-15, 支持率-5)", effect: (s) => { s.money -= 15; s.support -= 5; } },
+                { text: "インフルエンサーを雇って反論させる (予算-20, 支持率+10)", effect: (s) => { s.money -= 20; s.support += 10; } },
+                { text: "無視する (支持率-20)", effect: (s) => { s.support -= 20; } }
             ]
         },
-
-        // ----------------------------------------------------
-        // ルートA：武力鎮圧（軍事リソースの枯渇リスク）
-        // ----------------------------------------------------
-        'branch_fight_1': {
-            text: "機甲師団が進軍するも、町工場から発射された「即席コイルガン」により先頭車両が大破！<br>敵の技術力は予想を遥かに超えている。<br>通常の鎮圧では被害が拡大する一方だ。",
-            image: "event_railgun.jpg", // 【新規】
+        {
+            id: 'shortage',
+            text: "長期化する紛争により、前線の補給物資が不足しています。<br>兵士たちは空腹で、東成のお好み焼きの匂いに誘惑されています。",
+            image: "bg_ruins.jpg",
             choices: [
-                {
-                    text: "箕面山岳警備隊（特殊部隊）を投入",
-                    costText: "武力-25, 資金-5",
-                    next: 'scene_fight_2',
-                    condition: (s) => s.army >= 25,
-                    effect: (s) => { s.army -= 25; s.money -= 5; s.rebelPower -= 20; }
-                },
-                {
-                    text: "伊丹基地からの無差別爆撃",
-                    costText: "資金-20, 支持-25",
-                    next: 'scene_air_raid',
-                    condition: (s) => s.money >= 20,
-                    effect: (s) => { s.money -= 20; s.support -= 25; s.rebelPower -= 40; }
-                }
+                { text: "緊急増税を行い、物資を購入 (支持率-20, 予算+30, 武力+10)", effect: (s) => { s.support -= 20; s.money += 30; s.army += 10; } },
+                { text: "略奪を許可する (支持率-40, 武力+20, 反乱度+20)", effect: (s) => { s.support -= 40; s.army += 20; s.rebelPower += 20; } },
+                { text: "耐え忍ぶ (武力-20)", effect: (s) => { s.army -= 20; } }
             ]
-        },
+        }
+    ];
 
-        'scene_fight_2': {
-            text: "特殊部隊の活躍により敵前線は崩壊したが、彼らは地下鉄網（旧・中央線）を使って後退。<br>深江橋周辺の地下要塞に立てこもったようだ。<br>追い詰めるには危険が伴う。",
-            image: "event_attack.PNG",
+    /*
+     * 固定イベント（OP/ED/特殊）
+     */
+    const fixedScenes = {
+        'intro': {
+            text: "西暦20XX年。<br>大豊中皇国の支配に対し、ものづくりの街・東成区が武装蜂起。「東成独立戦争」が勃発した。<br>彼らの技術力は侮れない。資源を管理し、反乱を鎮圧せよ。<br><br>※注意：いずれかのリソースが0になる、または反乱度が100に達すると敗北となる。",
+            image: "bg_capital.PNG",
             choices: [
-                {
-                    text: "地下への毒ガス注入（国際条約違反）",
-                    costText: "支持-40, 敵壊滅",
-                    next: 'scene_climax_check',
-                    condition: (s) => true,
-                    effect: (s) => { s.support -= 40; s.rebelPower = 0; }
-                },
-                {
-                    text: "入口をコンクリで封鎖し兵糧攻め",
-                    costText: "資金-15, 敵強化",
-                    next: 'scene_siege_wait',
-                    condition: (s) => s.money >= 15,
-                    effect: (s) => { s.money -= 15; s.rebelPower += 20; }
-                }
+                { text: "作戦開始", next: 'game_loop_start', effect: () => {} }
             ]
         },
-
-        'scene_air_raid': {
-            text: "爆撃は成功したが、東成区は火の海と化した。<br>SNSでは「豊中の虐殺」として炎上しており、国際社会（主に京都・神戸）からの制裁がちらついている。",
-            image: "event_fire.jpg", 
+        // 阪急救済イベント
+        'hankyu_rescue': {
+            text: "<span style='color:#d4af37; font-weight:bold;'>【阪急の奇跡】</span><br>リソースが枯渇し、絶体絶命の危機に陥ったその時…<br>梅田方面から、黄金色の光を纏ったマルーンカラーの特急車両が突っ込んできた！<br>「阪急電鉄が皇国を支援する！」<br>莫大な支援物資と資金が投下されました。",
+            image: "event_hankyu.jpg",
             choices: [
-                {
-                    text: "京都に賄賂を送り黙らせる",
-                    costText: "資金-30",
-                    next: 'scene_climax_check',
-                    condition: (s) => s.money >= 30,
-                    effect: (s) => { s.money -= 30; }
-                },
-                {
-                    text: "無視して進軍（制裁発動）",
-                    costText: "資金-20, 支持-10",
-                    next: 'scene_climax_check',
-                    condition: (s) => true,
-                    effect: (s) => { s.money -= 20; s.support -= 10; s.rebelPower -= 10; }
+                { 
+                    text: "ありがたや…ありがたや… (全回復)", 
+                    next: 'game_loop_start', 
+                    effect: (s) => { 
+                        s.money = 100; s.army = 100; s.support = 100; s.rebelPower = 20; 
+                        s.isHankyuMode = true;
+                        document.getElementById('game-container').classList.add('hankyu-mode');
+                    } 
                 }
             ]
         },
-
-        // ----------------------------------------------------
-        // ルートB：買収・外交（資金リソースの枯渇リスク）
-        // ----------------------------------------------------
-        'branch_bribe_1': {
-            text: "鶴橋の闇市を通じて接触に成功。<br>しかし、彼らのバックには「南の大国・堺」がついている可能性がある。<br>要求額は法外だ。",
-            image: "event_blackmarket.jpg", // 【新規】
-            choices: [
-                {
-                    text: "要求通りに追加資金を支払う",
-                    costText: "資金-40",
-                    next: 'scene_bribe_2',
-                    condition: (s) => s.money >= 40,
-                    effect: (s) => { s.money -= 40; s.rebelPower -= 10; }
-                },
-                {
-                    text: "交渉の場で西成傭兵団を雇い急襲",
-                    costText: "資金-15, 武力-10",
-                    next: 'scene_mercenary_gamble',
-                    condition: (s) => s.money >= 15 && s.army >= 10,
-                    effect: (s) => { s.money -= 15; s.army -= 10; }
-                }
-            ]
-        },
-
-        'scene_bribe_2': {
-            text: "金を受け取ったはずの敵幹部だが、なんとその金で新型兵器を購入したとの情報が入った！<br>完全に舐められている。<br>支持率も「弱腰外交」と批判され急落中だ。",
-            image: "event_revolt.JPG",
-            choices: [
-                {
-                    text: "徹底抗戦に切り替える",
-                    costText: "武力-20, 支持-10",
-                    next: 'scene_climax_check',
-                    condition: (s) => s.army >= 20,
-                    effect: (s) => { s.army -= 20; s.support -= 10; s.rebelPower -= 10; }
-                },
-                {
-                    text: "プライドを捨てて停戦を乞う",
-                    costText: "支持-30, 資金-10",
-                    next: 'end_humiliation',
-                    condition: (s) => true,
-                    effect: (s) => { s.support -= 30; s.money -= 10; }
-                }
-            ]
-        },
-
-        'scene_mercenary_gamble': {
-            isLogic: true,
-            handler: (s) => {
-                // 西成傭兵団は気まぐれ。資金が多いと成功率アップ
-                const successChance = s.money > 30 ? 0.7 : 0.4;
-                if (Math.random() < successChance) {
-                    s.rebelPower = 0; 
-                    return 'end_good_assassin';
-                } else {
-                    s.money -= 20; // 持ち逃げされる
-                    s.rebelPower += 30; // 敵激怒
-                    return 'scene_mercenary_fail';
-                }
-            }
-        },
-
-        'scene_mercenary_fail': {
-            text: "最悪だ！ 傭兵団は我々の前金を待ち逃げし、逆にこちらの情報を敵に売った。<br>敵は我々の補給路を完全に把握し、逆侵攻を開始している。",
-            image: "event_nishinari_merc.jpg", // 【新規】
-            choices: [
-                { text: "最後の防衛戦へ...", next: 'scene_climax_check', effect: () => {} }
-            ]
-        },
-
-
-        // ----------------------------------------------------
-        // ルートC：諜報・サイバー（支持率と時間の勝負）
-        // ----------------------------------------------------
-        'branch_intel_1': {
-            text: "阪大AIの解析により、敵の指揮系統がデジタル化されていることが判明。<br>「深江橋サーバー」をダウンさせれば無力化できるが、敵も優秀なハッカーを雇っている。",
-            image: "event_cyber.jpg", // 【新規】
-            choices: [
-                {
-                    text: "インフラ全停止攻撃（市民生活に影響）",
-                    costText: "資金-10, 支持-20",
-                    next: 'scene_intel_2',
-                    condition: (s) => s.money >= 10,
-                    effect: (s) => { s.money -= 10; s.support -= 20; s.rebelPower -= 20; }
-                },
-                {
-                    text: "フェイクニュース拡散で内部崩壊を狙う",
-                    costText: "資金-5, 成功率中",
-                    next: 'scene_fake_news_gamble',
-                    condition: (s) => s.money >= 5,
-                    effect: (s) => { s.money -= 5; }
-                }
-            ]
-        },
-
-        'scene_intel_2': {
-            text: "東成区の電力・通信を遮断。敵の重機はただの鉄屑となった。<br>しかし、病院等のライフラインも止まり、人道的な非難が殺到。<br>デモ隊が豊中市役所を取り囲んでいる。",
-            image: "event_revolt.JPG",
-            choices: [
-                {
-                    text: "デモ隊を武力鎮圧し、東成へ進軍",
-                    costText: "武力-15, 支持-20",
-                    next: 'scene_climax_check',
-                    condition: (s) => s.army >= 15,
-                    effect: (s) => { s.army -= 15; s.support -= 20; s.rebelPower -= 30; }
-                },
-                {
-                    text: "責任者を更迭し、事態収拾を図る",
-                    costText: "武力-10",
-                    next: 'scene_climax_check',
-                    condition: (s) => true,
-                    effect: (s) => { s.army -= 10; s.rebelPower -= 10; } // あまり効果がない
-                }
-            ]
-        },
-
-        'scene_fake_news_gamble': {
-            isLogic: true,
-            handler: (s) => {
-                if (Math.random() > 0.5) {
-                    s.rebelPower -= 40;
-                    return 'scene_fake_news_success';
-                } else {
-                    s.support -= 30; // 嘘がバレた
-                    s.rebelPower += 10;
-                    return 'scene_fake_news_fail';
-                }
-            }
-        },
-
-        'scene_fake_news_success': {
-            text: "「反乱軍リーダーが資金を持ち逃げした」というデマが浸透。<br>敵組織は疑心暗鬼になり、仲間割れを始めている。<br>今が好機だ。",
-            image: "event_spy.jpg",
-            choices: [
-                { text: "混乱に乗じて制圧する", next: 'scene_climax_check', effect: (s) => { s.army -= 5; } }
-            ]
-        },
-        
-        'scene_fake_news_fail': {
-            text: "工作は失敗した。逆に「豊中政府の卑劣な嘘」としてプロパガンダに使われている。<br>北摂市民の中にも反乱への同情論が広まってしまった。",
-            image: "event_diplomacy.jpg",
-            choices: [
-                { text: "挽回不能か...", next: 'scene_climax_check', effect: (s) => { s.rebelPower += 20; } }
-            ]
-        },
-        
-        'scene_siege_wait': {
-            text: "兵糧攻めを続けている間に、敵は地下トンネルを通じて大阪市内から補給を受けていた！<br>時間が敵に味方したようだ。勢力を増した敵が地上に出てきた。",
-            image: "event_attack.PNG",
-            choices: [
-                { text: "迎撃するしかない", next: 'scene_climax_check', effect: (s) => { s.army -= 10; } }
-            ]
-        },
-
-
-        // ----------------------------------------------------
-        // クライマックス判定ロジック
-        // ----------------------------------------------------
-        'scene_climax_check': {
-            isLogic: true,
-            handler: (s) => {
-                // 総合力 = (資金 + 武力 + 支持率) 
-                // ただし、どれか一つでも極端に低いと足を引っ張る
-                const totalPower = s.money + s.army + s.support;
-                
-                // 敵勢力が強大化しすぎている場合
-                if (s.rebelPower >= 80) {
-                    return 'end_bad_overwhelmed';
-                }
-                
-                // リソース不足での敗北
-                if (totalPower < 60) {
-                    return 'end_bad_defeat';
-                }
-
-                // 勝利判定：敵の戦力を上回っているか
-                // 敵戦力補正: 敵戦力 * 3 と プレイヤー総合力 の比較
-                if (totalPower > (s.rebelPower * 3) + 50) {
-                    return 'end_true_victory';
-                } else if (totalPower > (s.rebelPower * 3)) {
-                    return 'end_normal_victory';
-                } else {
-                    return 'end_bad_defeat';
-                }
-            }
-        },
-
-        // ----------------------------------------------------
-        // エンディング集
-        // ----------------------------------------------------
-        'end_true_victory': {
-            text: "【完全勝利：大豊中の栄光】<br>完璧な作戦指揮により、東成反乱軍は無条件降伏しました。<br>接収した東成の工場群は皇国の産業を支え、北摂の覇権は揺るぎないものとなりました。<br>あなたの銅像が豊中駅前に建立されます。",
+        // エンディング
+        'win': {
+            text: "【鎮圧完了】<br>長きにわたる戦いの末、東成区の反乱軍は完全に沈黙した。<br>その卓越した技術力は再び大豊中皇国のために使われることになるだろう。<br>北摂の平和は守られたのだ。",
             image: "end_success.jpeg",
             choices: [{ text: "最初に戻る", next: 'intro', effect: (s) => resetGame(s) }]
         },
-        'end_normal_victory': {
-            text: "【辛勝：傷だらけの平和】<br>なんとか反乱を鎮圧しましたが、皇国のリソースは枯渇寸前です。<br>復興には長い年月がかかるでしょう。<br>市民の目は冷たく、次の選挙での勝利は絶望的です。",
-            image: "end_success.jpeg",
-            choices: [{ text: "最初に戻る", next: 'intro', effect: (s) => resetGame(s) }]
-        },
-        'end_good_assassin': {
-            text: "【裏工作勝利：闇の支配者】<br>表立った戦闘を避け、敵の中枢のみを排除しました。<br>東成区は傀儡政権によって統治されます。<br>あなたは「沈黙の元首」として恐れられるようになりました。",
-            image: "event_diplomacy.jpg",
-            choices: [{ text: "最初に戻る", next: 'intro', effect: (s) => resetGame(s) }]
-        },
-        'end_humiliation': {
-            text: "【屈辱的講和】<br>東成区の独立を認め、賠償金を支払うことで合意しました。<br>大豊中皇国の威信は地に落ち、周辺地域も次々と離反を宣言。<br>あなたは責任を問われ失脚しました。",
+        'lose_resource': {
+            text: "【国家崩壊】<br>戦争を継続するためのリソースが尽き果てました。<br>給与の支払われない兵士は去り、市民は暴徒化。<br>大豊中皇国は内部から崩れ去りました…。",
             image: "end_fail.jpeg",
             choices: [{ text: "最初に戻る", next: 'intro', effect: (s) => resetGame(s) }]
         },
-        'end_bad_overwhelmed': {
-            text: "【敗北：大阪大戦争へ】<br>対応の遅れにより反乱軍は強大化。「東大阪連合」「八尾空軍」までもが合流し、巨大勢力となりました。<br>もはや一自治体の手には負えません。<br>豊中市街地への砲撃が始まりました。",
-            image: "end_fail.jpeg",
-            choices: [{ text: "最初に戻る", next: 'intro', effect: (s) => resetGame(s) }]
-        },
-        'end_bad_defeat': {
-            text: "【敗北：亡命】<br>最終防衛ラインが突破されました。<br>リソース配分のミスが命取りでした。<br>あなたは伊丹空港から国外（兵庫県）へ亡命します...",
-            image: "end_exile.jpg", // 【新規】
-            choices: [{ text: "最初に戻る", next: 'intro', effect: (s) => resetGame(s) }]
-        },
-        
-        'game_over_resource': {
-            text: "【国家崩壊】<br>必要なリソースが尽き、組織を維持することができません。<br>大豊中皇国は内部から崩壊しました。<br>（資金・武力・支持率のいずれかが0になりました）",
-            image: "end_fail.jpeg",
+        'lose_rebel': {
+            text: "【東成独立】<br>反乱軍の勢いを止めることができませんでした。<br>彼らは独自兵器で豊中市内へ侵攻、皇国政府は亡命を余儀なくされました。<br>ここに「東成連邦」の樹立が宣言されます。",
+            image: "event_revolt.JPG",
             choices: [{ text: "最初に戻る", next: 'intro', effect: (s) => resetGame(s) }]
         }
     };
 
     /*
-     * システム関数
+     * ゲームロジック
      */
 
     function resetGame(s) {
         Object.assign(s, initialGameState);
+        document.getElementById('game-container').classList.remove('hankyu-mode');
         document.getElementById('overlay').style.opacity = 0;
     }
 
     function checkGameOver() {
+        // 敗北条件
         if (gameState.money <= 0 || gameState.army <= 0 || gameState.support <= 0) {
-            return true;
+            return 'lose_resource';
+        }
+        if (gameState.rebelPower >= 100) {
+            return 'lose_rebel';
+        }
+        // 勝利条件
+        if (gameState.rebelPower <= 0) {
+            return 'win';
+        }
+        return null;
+    }
+
+    // 阪急救済チャンス判定
+    function checkHankyuSupport() {
+        // いずれかのパラメータが15以下、かつ反乱度が高い場合
+        const isCritical = (gameState.money <= 15 || gameState.army <= 15 || gameState.support <= 15);
+        if (isCritical && !gameState.isHankyuMode) {
+            // 10%の確率で発動
+            if (Math.random() < 0.10) {
+                return true;
+            }
         }
         return false;
     }
 
-    function updateScreen() {
-        // 値の更新
+    function updateScreen(sceneId) {
+        // シーンID指定がなければループ処理へ
+        if (sceneId === 'game_loop_start') {
+            nextTurn();
+            return;
+        }
+
+        // 状態更新
         const moneyEl = document.getElementById('money-val');
         const armyEl = document.getElementById('army-val');
         const supportEl = document.getElementById('support-val');
         const rebelEl = document.getElementById('rebel-val');
+        const turnEl = document.getElementById('turn-val');
 
         moneyEl.textContent = gameState.money;
         armyEl.textContent = gameState.army;
         supportEl.textContent = gameState.support;
-        
-        // 敵勢力のヒント表示（完全には見せない）
-        let rebelText = "低い";
-        if (gameState.rebelPower > 30) rebelText = "警戒";
-        if (gameState.rebelPower > 50) rebelText = "高い";
-        if (gameState.rebelPower > 70) rebelText = "極大";
-        rebelEl.textContent = rebelText;
-        if (gameState.rebelPower > 70) rebelEl.parentElement.style.backgroundColor = "rgba(255,0,0,0.9)";
-        else rebelEl.parentElement.style.backgroundColor = "rgba(255,0,0,0.6)";
+        rebelEl.textContent = gameState.rebelPower;
+        turnEl.textContent = gameState.turn;
 
         // ピンチ演出
         moneyEl.className = gameState.money <= 20 ? 'stat-value danger' : 'stat-value';
         armyEl.className = gameState.army <= 20 ? 'stat-value danger' : 'stat-value';
         supportEl.className = gameState.support <= 20 ? 'stat-value danger' : 'stat-value';
+        rebelEl.className = gameState.rebelPower >= 80 ? 'stat-value danger' : 'stat-value';
 
-        // ゲームオーバー割り込み判定
-        if (!gameState.currentScene.startsWith('end_') && gameState.currentScene !== 'game_over_resource') {
-             if (checkGameOver()) {
-                gameState.currentScene = 'game_over_resource';
-                document.getElementById('overlay').style.opacity = 1; 
-             }
+        // シーンデータの取得
+        let sceneData;
+        if (fixedScenes[sceneId]) {
+            sceneData = fixedScenes[sceneId];
+        } else {
+            // ランダムイベントの場合
+            sceneData = randomEvents.find(e => e.id === sceneId);
         }
 
-        const sceneData = scenes[gameState.currentScene];
-
-        // ロジックシーン処理
-        if (sceneData.isLogic) {
-            const nextSceneId = sceneData.handler(gameState);
-            gameState.currentScene = nextSceneId;
-            updateScreen(); 
-            return;
-        }
-
-        // 画像更新
+        // 画像表示
         const imgContainer = document.getElementById('scene-image');
-        // 画像要素以外のオーバーレイを残すため、imgタグのみ操作
-        let img = imgContainer.querySelector('img');
-        let placeholder = imgContainer.querySelector('.placeholder');
-        
+        imgContainer.innerHTML = '';
         if (sceneData.image) {
-            if (!img) {
-                img = document.createElement('img');
-                imgContainer.appendChild(img);
-            }
-            img.style.display = 'block';
+            const img = document.createElement('img');
             img.src = sceneData.image;
-            if(placeholder) placeholder.style.display = 'none';
-            
             img.onerror = function() {
                 this.style.display = 'none';
-                if(placeholder) {
-                    placeholder.style.display = 'block';
-                    placeholder.textContent = `NO IMAGE: ${sceneData.image}`;
-                }
+                const div = document.createElement('div');
+                div.className = 'placeholder';
+                div.innerHTML = `イメージ信号途絶<br>${sceneData.image}`;
+                imgContainer.appendChild(div);
             };
-        } else {
-            if(img) img.style.display = 'none';
-            if(placeholder) placeholder.style.display = 'block';
+            imgContainer.appendChild(img);
         }
 
-        // テキスト更新
+        // テキスト表示
         document.getElementById('story-text').innerHTML = sceneData.text;
 
-        // 選択肢更新
+        // 選択肢生成
         const choicesContainer = document.getElementById('choices-area');
         choicesContainer.innerHTML = '';
 
@@ -666,32 +458,55 @@
             const btn = document.createElement('button');
             btn.className = 'choice-btn';
             
-            // コスト表示
-            let html = choice.text;
-            if (choice.costText) {
-                html += `<span class="choice-cost">(${choice.costText})</span>`;
-            }
-            btn.innerHTML = html;
-
-            // 条件判定（リソース不足なら無効化するか、あるいは押してゲームオーバーにするか）
-            // Hardcoreなら「押せるが死ぬ」方が面白いが、親切設計にするならdisabled
-            // 今回は「押せるが死ぬ」ではなく、そもそも選択できない（disabled）にして詰みを悟らせる
-            if (choice.condition && !choice.condition(gameState)) {
-                btn.disabled = true;
-                btn.innerHTML += " <span style='color:red;'>[不足]</span>";
+            // 阪急イベントだけ特別クラス
+            if (sceneId === 'hankyu_rescue') {
+                btn.classList.add('hankyu-btn');
             }
 
+            btn.innerHTML = choice.text;
             btn.onclick = () => {
                 if (choice.effect) choice.effect(gameState);
-                gameState.currentScene = choice.next;
-                updateScreen();
+                
+                // 次のシーン決定ロジック
+                if (choice.next) {
+                    updateScreen(choice.next);
+                } else {
+                    // next指定がない場合はループ継続
+                    updateScreen('game_loop_start');
+                }
             };
             choicesContainer.appendChild(btn);
         });
     }
 
-    // 開始
-    updateScreen();
+    function nextTurn() {
+        // ゲームオーバー判定
+        const result = checkGameOver();
+        if (result) {
+            updateScreen(result);
+            return;
+        }
+
+        // 阪急チャンス判定
+        if (checkHankyuSupport()) {
+            updateScreen('hankyu_rescue');
+            return;
+        }
+
+        // ターン経過処理
+        gameState.turn++;
+        // 反乱度は時間とともに自然増加する（難易度担保）
+        gameState.rebelPower += 5;
+        
+        // ランダムにイベントを抽選
+        const randomIndex = Math.floor(Math.random() * randomEvents.length);
+        const nextEvent = randomEvents[randomIndex];
+
+        updateScreen(nextEvent.id);
+    }
+
+    // 初期化実行
+    updateScreen('intro');
 
 </script>
 </body>
